@@ -1,0 +1,14 @@
+{
+  "name": "onchain-redpacket",
+  "version": "1.0.0",
+  "description": "Onchain Red Packet Agent — send crypto red packets via shareable links, powered by Onchain OS",
+  "scripts": {
+    "start": "npm run build --prefix server && node server/dist/index.js",
+    "dev": "npm run dev --prefix server",
+    "build": "npm run build --prefix server",
+    "install:all": "npm install --prefix server"
+  },
+  "keywords": ["onchain", "redpacket", "agent", "okx", "onchainos"],
+  "author": "",
+  "license": "MIT"
+}
