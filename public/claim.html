@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>领红包 🧧</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #c0392b 0%, #e74c3c 50%, #c0392b 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 2rem;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    .emoji { font-size: 4rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.6rem; color: #c0392b; margin-bottom: 0.5rem; }
+    .meta { color: #888; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .stats {
+      display: flex;
+      justify-content: space-around;
+      background: #fef9f0;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-item { text-align: center; }
+    .stat-num { font-size: 1.4rem; font-weight: 700; color: #c0392b; }
+    .stat-label { font-size: 0.75rem; color: #888; }
+    .message-box {
+      background: #fff5f5;
+      border-left: 4px solid #e74c3c;
+      padding: 0.8rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      font-style: italic;
+      color: #555;
+      text-align: left;
+    }
+    input {
+      width: 100%;
+      padding: 0.9rem 1rem;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+      transition: border-color 0.2s;
+      font-family: monospace;
+    }
+    input:focus { outline: none; border-color: #e74c3c; }
+    button {
+      width: 100%;
+      padding: 1rem;
+      background: linear-gradient(135deg, #c0392b, #e74c3c);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button:hover { opacity: 0.9; transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .result {
+      margin-top: 1.5rem;
+      padding: 1.2rem;
+      border-radius: 12px;
+      display: none;
+    }
+    .result.success { background: #f0fff4; border: 2px solid #38a169; }
+    .result.error   { background: #fff5f5; border: 2px solid #e53e3e; }
+    .result-amount { font-size: 2rem; font-weight: 700; color: #38a169; }
+    .result-tx { font-size: 0.7rem; color: #888; word-break: break-all; margin-top: 0.5rem; }
+    .exhausted { color: #888; font-size: 0.9rem; margin-top: 1rem; }
+    .loading { animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    .claims-section { margin-top: 1.5rem; text-align: left; }
+    .claims-title { font-size: 0.85rem; font-weight: 700; color: #888; margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .claim-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 0.85rem;
+    }
+    .claim-item:last-child { border-bottom: none; }
+    .claim-addr { color: #555; font-family: monospace; font-size: 0.78rem; }
+    .claim-amount { font-weight: 700; color: #c0392b; white-space: nowrap; margin-left: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="emoji">🧧</div>
+    <h1>链上红包</h1>
+    <p class="meta" id="meta">加载中...</p>
+    <div class="stats" id="stats" style="display:none">
+      <div class="stat-item">
+        <div class="stat-num" id="statTotal">-</div>
+        <div class="stat-label">总金额</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="statClaimed">-</div>
+        <div class="stat-label">已领</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="statLeft">-</div>
+        <div class="stat-label">剩余</div>
+      </div>
+    </div>
+    <div class="message-box" id="msgBox" style="display:none"></div>
+
+    <div id="claimForm">
+      <input id="walletInput" type="text" placeholder="输入你的钱包地址 (0x...)" autocomplete="off" />
+      <button id="claimBtn" onclick="claim()">抢红包 🧧</button>
+    </div>
+
+    <div class="result" id="result">
+      <div id="resultContent"></div>
+    </div>
+
+    <div class="claims-section" id="claimsSection" style="display:none">
+      <div class="claims-title">领取记录</div>
+      <div id="claimsList"></div>
+    </div>
+  </div>
+
+  <script>
+    const packetId = location.pathname.split('/claim/')[1];
+    const API = '';
+
+    async function loadPacket() {
+      try {
+        const res = await fetch(`${API}/api/packets/${packetId}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        const p = data.packet;
+        document.getElementById('meta').textContent =
+          `${p.totalAmount} ${p.token} · ${p.chain.toUpperCase()} · ${p.splitType === 'random' ? '随机' : '平均'}`;
+        document.getElementById('statTotal').textContent = `${p.totalAmount} ${p.token}`;
+        document.getElementById('statClaimed').textContent = `${p.claimedCount}/${p.count}`;
+        document.getElementById('statLeft').textContent = `${p.count - p.claimedCount}`;
+        document.getElementById('stats').style.display = 'flex';
+        if (p.message) {
+          document.getElementById('msgBox').textContent = `"${p.message}"`;
+          document.getElementById('msgBox').style.display = 'block';
+        }
+        // Render claims list
+        if (data.claims && data.claims.length > 0) {
+          const list = document.getElementById('claimsList');
+          list.innerHTML = data.claims.map((c, i) => {
+            const addr = c.recipientAddress;
+            const short = addr.length > 12 ? addr.slice(0, 6) + '...' + addr.slice(-4) : addr;
+            return `<div class="claim-item">
+              <span>${i + 1}. <span class="claim-addr">${short}</span></span>
+              <span class="claim-amount">${c.amount} ${p.token}</span>
+            </div>`;
+          }).join('');
+          document.getElementById('claimsSection').style.display = 'block';
+        }
+
+        if (p.status === 'exhausted') {
+          document.getElementById('claimForm').innerHTML =
+            '<p class="exhausted">红包已被领完啦 🎉</p>';
+        } else if (p.status === 'expired') {
+          document.getElementById('claimForm').innerHTML =
+            '<p class="exhausted">红包已过期</p>';
+        } else if (p.status === 'pending_funding') {
+          document.getElementById('claimForm').innerHTML =
+            '<p class="exhausted">红包正在准备中，请稍候...</p>';
+        }
+      } catch (e) {
+        document.getElementById('meta').textContent = '红包不存在或加载失败';
+      }
+    }
+
+    async function claim() {
+      const address = document.getElementById('walletInput').value.trim();
+      if (!address) { alert('请输入钱包地址'); return; }
+
+      const btn = document.getElementById('claimBtn');
+      btn.disabled = true;
+      btn.textContent = '处理中...';
+      btn.classList.add('loading');
+
+      try {
+        const res = await fetch(`${API}/api/packets/${packetId}/claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipientAddress: address }),
+        });
+        const data = await res.json();
+        const el = document.getElementById('result');
+        const content = document.getElementById('resultContent');
+
+        if (res.ok) {
+          el.className = 'result success';
+          content.innerHTML = `
+            <div>🎉 恭喜你抢到红包！</div>
+            <div class="result-amount">${data.amount} ${data.token || ''}</div>
+            <div class="result-tx">TX: ${data.txHash}</div>
+          `;
+          document.getElementById('claimForm').style.display = 'none';
+          loadPacket();
+        } else {
+          el.className = 'result error';
+          content.innerHTML = `<div>❌ ${data.error}</div>`;
+          btn.disabled = false;
+          btn.textContent = '抢红包 🧧';
+          btn.classList.remove('loading');
+        }
+        el.style.display = 'block';
+      } catch (e) {
+        alert('网络错误，请重试');
+        btn.disabled = false;
+        btn.textContent = '抢红包 🧧';
+        btn.classList.remove('loading');
+      }
+    }
+
+    loadPacket();
+  </script>
+</body>
+</html>
