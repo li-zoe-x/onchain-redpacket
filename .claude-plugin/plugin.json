@@ -1,0 +1,8 @@
+{
+  "name": "onchain-redpacket",
+  "version": "1.0.0",
+  "description": "Onchain red packet agent — create USDC/OKB/SOL red packets on XLayer & Solana and share via link, powered by OKX Agentic Wallet",
+  "author": { "name": "oker" },
+  "keywords": ["redpacket", "onchain", "onchainos", "okx", "defi", "payments"],
+  "skills": "../skills/"
+}
