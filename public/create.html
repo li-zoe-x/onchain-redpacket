@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>发红包 🧧</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #c0392b 0%, #e74c3c 50%, #c0392b 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 2rem;
+      max-width: 460px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 1.8rem;
+    }
+    .emoji { font-size: 3rem; }
+    h1 { font-size: 1.5rem; color: #c0392b; margin-top: 0.5rem; }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #444;
+      margin-bottom: 0.4rem;
+      margin-top: 1rem;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #e74c3c;
+    }
+    textarea { resize: none; height: 70px; }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.8rem;
+    }
+
+    .split-group {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 0;
+    }
+    .split-btn {
+      flex: 1;
+      padding: 0.75rem;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #888;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .split-btn.active {
+      border-color: #e74c3c;
+      color: #e74c3c;
+      background: #fff5f5;
+    }
+
+    button[type=submit] {
+      width: 100%;
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: linear-gradient(135deg, #c0392b, #e74c3c);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button[type=submit]:hover { opacity: 0.9; transform: translateY(-1px); }
+    button[type=submit]:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .result {
+      margin-top: 1.5rem;
+      padding: 1.2rem;
+      border-radius: 12px;
+      display: none;
+    }
+    .result.success { background: #f0fff4; border: 2px solid #38a169; }
+    .result.error   { background: #fff5f5; border: 2px solid #e53e3e; }
+
+    .result-title { font-weight: 700; margin-bottom: 0.8rem; color: #2d6a4f; }
+    .result-row { font-size: 0.85rem; color: #555; margin-bottom: 0.4rem; word-break: break-all; }
+    .result-row strong { color: #222; }
+
+    .claim-link {
+      display: block;
+      margin-top: 0.8rem;
+      padding: 0.7rem 1rem;
+      background: #e74c3c;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .copy-btn {
+      display: inline-block;
+      margin-top: 0.5rem;
+      padding: 0.4rem 0.8rem;
+      background: #f0f0f0;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      color: #444;
+    }
+    .copy-btn:hover { background: #e0e0e0; }
+
+    .qr-wrap { text-align: center; margin-top: 1rem; }
+    .qr-wrap img { width: 140px; height: 140px; border-radius: 8px; }
+    .qr-wrap p { font-size: 0.75rem; color: #888; margin-top: 0.4rem; }
+
+    .fund-notice {
+      margin-top: 0.8rem;
+      padding: 0.8rem;
+      background: #fffbea;
+      border-left: 4px solid #f6c90e;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="emoji">🧧</div>
+      <h1>发链上红包</h1>
+    </div>
+
+    <form id="form">
+      <div class="row">
+        <div>
+          <label>链</label>
+          <select id="chain">
+            <option value="xlayer">XLayer（零 Gas）</option>
+            <option value="xlayer-testnet">XLayer 测试网</option>
+            <option value="solana">Solana</option>
+            <option value="solana-devnet">Solana Devnet</option>
+          </select>
+        </div>
+        <div>
+          <label>代币</label>
+          <select id="token">
+            <option value="USDC">USDC</option>
+            <option value="USDT">USDT</option>
+            <option value="OKB">OKB</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>总金额</label>
+          <input id="totalAmount" type="number" min="0.000000001" step="0.000000001" placeholder="100" />
+        </div>
+        <div>
+          <label>红包个数</label>
+          <input id="count" type="number" min="1" max="200" placeholder="10" />
+        </div>
+      </div>
+
+      <label>分配方式</label>
+      <div class="split-group">
+        <div class="split-btn active" data-val="random" onclick="selectSplit('random', this)">🎲 随机</div>
+        <div class="split-btn" data-val="equal" onclick="selectSplit('equal', this)">⚖️ 平均</div>
+      </div>
+      <input type="hidden" id="splitType" value="random" />
+
+      <label>祝福语（可选）</label>
+      <textarea id="message" placeholder="onchainos up up"></textarea>
+
+      <button type="submit" id="submitBtn">发红包 🧧</button>
+    </form>
+
+    <div class="result" id="result">
+      <div id="resultContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const TOKEN_MAP = {
+      xlayer:          ['USDC', 'USDT', 'OKB'],
+      'xlayer-testnet':['USDC', 'OKB'],
+      solana:          ['USDC', 'USDT', 'SOL'],
+      'solana-devnet': ['USDC', 'SOL'],
+    };
+
+    document.getElementById('chain').addEventListener('change', function () {
+      const tokens = TOKEN_MAP[this.value] || ['USDC'];
+      const sel = document.getElementById('token');
+      sel.innerHTML = tokens.map(t => `<option value="${t}">${t}</option>`).join('');
+    });
+
+    function selectSplit(val, el) {
+      document.querySelectorAll('.split-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('splitType').value = val;
+    }
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.textContent = '创建中...';
+
+      const body = {
+        chain:       document.getElementById('chain').value,
+        token:       document.getElementById('token').value,
+        totalAmount: document.getElementById('totalAmount').value,
+        count:       parseInt(document.getElementById('count').value),
+        splitType:   document.getElementById('splitType').value,
+        message:     document.getElementById('message').value.trim(),
+      };
+
+      try {
+        const res = await fetch('/api/packets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        const el = document.getElementById('result');
+        const content = document.getElementById('resultContent');
+
+        if (res.ok) {
+          el.className = 'result success';
+          content.innerHTML = `
+            <div class="result-title">🎉 红包创建成功！</div>
+            <div class="result-row"><strong>红包 ID：</strong>${data.packetId}</div>
+            <div class="result-row"><strong>代理钱包（打款地址）：</strong><br>${data.agentWallet}
+              <button class="copy-btn" onclick="copy('${data.agentWallet}', this)">复制</button>
+            </div>
+            <div class="result-row"><strong>金额：</strong>${body.totalAmount} ${body.token}（${body.count} 个，${body.splitType === 'random' ? '随机' : '平均'}）</div>
+            <div class="fund-notice">
+              ⚠️ 请先向上方地址转入 <strong>${body.totalAmount} ${body.token}</strong>，转账确认后红包自动激活。
+            </div>
+            <a class="claim-link" href="${data.claimUrl}" target="_blank">打开领红包页面 →</a>
+            <button class="copy-btn" style="width:100%;margin-top:0.4rem" onclick="copy('${data.claimUrl}', this)">复制领取链接</button>
+          `;
+        } else {
+          el.className = 'result error';
+          content.innerHTML = `<div>❌ ${data.error}</div>`;
+        }
+        el.style.display = 'block';
+      } catch (err) {
+        alert('网络错误，请重试');
+      }
+
+      btn.disabled = false;
+      btn.textContent = '发红包 🧧';
+    });
+
+    function copy(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const old = btn.textContent;
+        btn.textContent = '已复制！';
+        setTimeout(() => btn.textContent = old, 1500);
+      });
+    }
+  </script>
+</body>
+</html>
