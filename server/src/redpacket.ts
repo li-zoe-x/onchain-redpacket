@@ -1,7 +1,8 @@
 import { nanoid } from 'nanoid';
 import {
   savePacket, getPacket, getAllPackets, updatePacketStatus,
-  saveClaim, getClaimsByPacket, hasRecipientClaimed,
+  getClaimsByPacket,
+  reserveClaimSlot, updateClaimRecord, deleteClaim,
 } from './store';
 import {
   getChainId, getAgentAddress, getTokenBalance,
@@ -149,41 +150,76 @@ export async function claimPacket(
   }
 
   const normalizedAddress = recipientAddress.toLowerCase();
-  if (hasRecipientClaimed(packetId, normalizedAddress)) {
+
+  // Pre-calculate envelope amount
+  const { decimals } = await parseTokenAmount(packet.chain, packet.token, '0');
+
+  // Atomically reserve a slot in DB before any async work
+  // This prevents race conditions: two concurrent requests can't both pass the check
+  const claimId = nanoid(12);
+  const reservation = reserveClaimSlot(
+    packetId,
+    normalizedAddress,
+    claimId,
+    '0',       // placeholder, updated after transfer
+    '0',       // placeholder
+  );
+
+  if (!reservation) {
+    // Reservation failed: already claimed or no slots left
+    const fresh = getPacket(packetId)!;
+    if (fresh.claimedCount >= fresh.count) {
+      updatePacketStatus(packetId, 'exhausted', fresh.claimedCount, fresh.distributedAmount);
+      throw new Error('No more red packets available!');
+    }
     throw new Error('You have already claimed this red packet!');
   }
 
-  if (packet.claimedCount >= packet.count) {
-    updatePacketStatus(packetId, 'exhausted', packet.claimedCount, packet.distributedAmount);
-    throw new Error('No more red packets available!');
-  }
-
-  // Pick next envelope
-  const envelopeWei = packet.envelopes[packet.claimedCount];
-  const { amountWei: _, ...rest } = await parseTokenAmount(packet.chain, packet.token, '0')
-    .then(({ decimals }) => ({
-      amountWei: envelopeWei,
-      decimals,
-      amount: formatTokenAmount(envelopeWei, decimals),
-    }));
-
-  const decimals = rest.decimals;
+  // Pick the envelope assigned to this slot
+  const envelopeWei = packet.envelopes[reservation.envelopeIndex];
   const amountHuman = formatTokenAmount(envelopeWei, decimals);
 
   // Execute on-chain transfer
-  const txHash = await transferToken(packet.chain, packet.token, recipientAddress, amountHuman);
+  let txHash: string;
+  try {
+    txHash = await transferToken(packet.chain, packet.token, recipientAddress, amountHuman);
+  } catch (err: any) {
+    // Transfer failed — rollback: remove the pending claim and decrement claimedCount
+    updatePacketStatus(
+      packetId,
+      packet.status,
+      reservation.envelopeIndex,         // restore original claimedCount
+      packet.distributedAmount,
+    );
+    // Remove the placeholder claim record
+    deleteClaim(claimId);
 
-  const newClaimedCount = packet.claimedCount + 1;
+    const msg: string = err.message || '';
+    const isInsufficientBalance =
+      msg.includes('transfer amount exceeds balance') ||
+      msg.includes('insufficient funds') ||
+      msg.includes('insufficient balance') ||
+      msg.includes('Insufficient balance') ||
+      msg.includes('insufficient lamports');
+    if (isInsufficientBalance) {
+      throw new Error('请联系发红包人，当前发红包人的账户余额不足');
+    }
+    throw err;
+  }
+
+  // Transfer succeeded — update claim record with real txHash and amount
+  updateClaimRecord(claimId, txHash, amountHuman, envelopeWei);
+
   const newDistributed = (
     BigInt(packet.distributedAmount === '0' ? '0' : packet.distributedAmount) +
     BigInt(envelopeWei)
   ).toString();
-
+  const newClaimedCount = reservation.envelopeIndex + 1;
   const newStatus = newClaimedCount >= packet.count ? 'exhausted' : 'active';
   updatePacketStatus(packetId, newStatus, newClaimedCount, newDistributed);
 
   const claim: Claim = {
-    id: nanoid(12),
+    id: claimId,
     packetId,
     recipientAddress: normalizedAddress,
     amount: amountHuman,
@@ -191,7 +227,6 @@ export async function claimPacket(
     txHash,
     claimedAt: Date.now(),
   };
-  saveClaim(claim);
 
   return { claim, txHash };
 }
@@ -201,12 +236,29 @@ export async function activatePacket(packetId: string): Promise<void> {
   if (!packet) throw new Error('Red packet not found');
   if (packet.status !== 'pending_funding') return;
 
-  // Check if funded
   const balance = await getTokenBalance(packet.chain, packet.agentWallet, packet.token);
-  const balanceNum = parseFloat(balance);
-  const totalNum = parseFloat(packet.totalAmount);
 
-  if (balanceNum >= totalNum) {
+  // Sum up funds already reserved by other active/pending packets (same chain + token)
+  // Use totalAmountWei for accurate comparison
+  const allPackets = getAllPackets();
+  const reservedWei = allPackets
+    .filter(p =>
+      p.id !== packetId &&
+      (p.status === 'active' || p.status === 'pending_funding') &&
+      p.chain === packet.chain &&
+      p.token.toLowerCase() === packet.token.toLowerCase()
+    )
+    .reduce((sum, p) => {
+      const totalWei = BigInt(p.totalAmountWei);
+      const distributedWei = BigInt(p.distributedAmount === '0' ? '0' : p.distributedAmount);
+      const remainingWei = totalWei > distributedWei ? totalWei - distributedWei : 0n;
+      return sum + remainingWei;
+    }, 0n);
+
+  const { amountWei: neededWei } = await parseTokenAmount(packet.chain, packet.token, packet.totalAmount);
+  const { amountWei: balanceWei } = await parseTokenAmount(packet.chain, packet.token, balance);
+
+  if (BigInt(balanceWei) >= reservedWei + BigInt(neededWei)) {
     updatePacketStatus(packetId, 'active', 0, '0');
   }
 }
