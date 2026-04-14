@@ -85,7 +85,8 @@ export function saveClaim(claim: Claim): void {
 }
 
 export function getClaimsByPacket(packetId: string): Claim[] {
-  return db.prepare('SELECT * FROM claims WHERE packetId = ? ORDER BY claimedAt ASC').all(packetId) as Claim[];
+  // Exclude pending claims (txHash IS NULL) — these are mid-flight reservations
+  return db.prepare('SELECT * FROM claims WHERE packetId = ? AND txHash IS NOT NULL ORDER BY claimedAt ASC').all(packetId) as Claim[];
 }
 
 export function hasRecipientClaimed(packetId: string, recipientAddress: string): boolean {
@@ -95,6 +96,51 @@ export function hasRecipientClaimed(packetId: string, recipientAddress: string):
   return !!row;
 }
 
-export function updateClaimTxHash(claimId: string, txHash: string): void {
-  db.prepare('UPDATE claims SET txHash = ? WHERE id = ?').run(txHash, claimId);
+/**
+ * Atomically reserve a claim slot.
+ * Inserts a pending claim record and increments claimedCount in one transaction.
+ * Returns the claim id if successful, null if already claimed or no slots left.
+ */
+export function reserveClaimSlot(
+  packetId: string,
+  recipientAddress: string,
+  claimId: string,
+  amount: string,
+  amountWei: string,
+): { envelopeIndex: number } | null {
+  const result = db.transaction(() => {
+    const packet = db.prepare('SELECT * FROM packets WHERE id = ?').get(packetId) as any;
+    if (!packet) return null;
+    if (packet.claimedCount >= packet.count) return null;
+
+    const alreadyClaimed = db.prepare(
+      'SELECT id FROM claims WHERE packetId = ? AND recipientAddress = ?'
+    ).get(packetId, recipientAddress);
+    if (alreadyClaimed) return null;
+
+    const envelopeIndex = packet.claimedCount;
+
+    // Insert pending claim (txHash null = pending)
+    db.prepare(`
+      INSERT INTO claims (id, packetId, recipientAddress, amount, amountWei, txHash, claimedAt)
+      VALUES (?, ?, ?, ?, ?, NULL, ?)
+    `).run(claimId, packetId, recipientAddress, amount, amountWei, Date.now());
+
+    // Increment claimedCount immediately to block concurrent claims
+    db.prepare(`
+      UPDATE packets SET claimedCount = claimedCount + 1 WHERE id = ?
+    `).run(packetId);
+
+    return { envelopeIndex };
+  })();
+
+  return result ?? null;
+}
+
+export function updateClaimRecord(claimId: string, txHash: string, amount: string, amountWei: string): void {
+  db.prepare('UPDATE claims SET txHash = ?, amount = ?, amountWei = ? WHERE id = ?').run(txHash, amount, amountWei, claimId);
+}
+
+export function deleteClaim(claimId: string): void {
+  db.prepare('DELETE FROM claims WHERE id = ?').run(claimId);
 }
